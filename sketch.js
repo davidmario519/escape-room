@@ -1,27 +1,24 @@
 // Escape Room — Stage 1 MVP
 // 혼자만의 고독한 사투
 
-const W = 360;
-const H = 640;
-const ROOM_TOP = 70;
-const ROOM_BOTTOM = 440;
-const BTN_AREA_TOP = 470;
-
-const PLAYER_RANGE_LEFT = 70;   // 침대 가까운 x
-const PLAYER_RANGE_RIGHT = W - 55; // 문 가까운 x
+// --- 적응형 캔버스 ---
+let W, H, S;                            // W/H = 캔버스 픽셀, S = 아트 스케일 (W/360 기준)
+let ROOM_TOP, ROOM_BOTTOM, BTN_AREA_TOP;
+let PLAYER_RANGE_LEFT, PLAYER_RANGE_RIGHT;
+const DESKTOP_MAX_W = 500;              // 데스크탑에서 너비 제한 (모바일에서는 자동으로 풀폭)
 
 // --- 밸런스 수치 ---
-const AUTO_DRIFT_PER_SEC = 0.025;       // 가만히 있으면 약 40초에 침대 도달
-const FORWARD_PER_TAP = 0.020;          // 박스 0개 기준 한 탭당 전진
-const BOX_PENALTY = 0.5;                // forward / (1 + boxCount * 0.5)
+const AUTO_DRIFT_PER_SEC = 0.025;
+const FORWARD_PER_TAP = 0.020;
+const BOX_PENALTY = 0.5;
 const BOX_INTERVAL_MS = 4000;
-const MAX_BOX_COUNT = 8;                // 이 수치 이상 쌓이면 압사
+const MAX_BOX_COUNT = 8;
 
 // --- 상태 ---
-let phase = 'countdown';   // 'countdown' | 'playing' | 'win' | 'lose'
-let loseReason = null;     // 'bed' | 'crushed'
+let phase = 'countdown';
+let loseReason = null;
 let countdownStart = 0;
-let playerX = 0.5;          // 0 = 침대, 1 = 문
+let playerX = 0.5;
 let boxCount = 0;
 let lastBoxDrop = 0;
 let boxFlashAt = -9999;
@@ -29,12 +26,38 @@ let heldRest = false;
 let endShownAt = 0;
 
 function setup() {
+  recomputeLayout();
   const cnv = createCanvas(W, H);
   cnv.style('display', 'block');
-  pixelDensity(1);
-  noSmooth();
+  smooth();
   textAlign(CENTER, CENTER);
   resetGame();
+}
+
+function windowResized() {
+  recomputeLayout();
+  resizeCanvas(W, H);
+}
+
+// 뷰포트 크기로부터 레이아웃 좌표·스케일을 재계산
+function recomputeLayout() {
+  W = Math.min(window.innerWidth, DESKTOP_MAX_W);
+  H = window.innerHeight;
+  S = W / 360;
+
+  // 하단 버튼 영역
+  const btnAreaH = Math.min(170 * S, H * 0.30);
+  const bottomMargin = 16 * S;
+  BTN_AREA_TOP = H - btnAreaH - bottomMargin;
+
+  // 방 영역
+  const roomGap = 16 * S;
+  ROOM_BOTTOM = BTN_AREA_TOP - roomGap;
+  ROOM_TOP = Math.max(50 * S, H * 0.08);
+
+  // 플레이어 가로 범위
+  PLAYER_RANGE_LEFT = W * 0.22;
+  PLAYER_RANGE_RIGHT = W * 0.84;
 }
 
 function resetGame() {
@@ -100,36 +123,28 @@ function stepPlaying() {
 
 // ---------- scene ----------
 function drawScene() {
-  // 밝기: 오른쪽으로 갈수록 밝아짐
   const b = constrain(playerX, 0, 1);
   const bg = lerpColor(color(10, 8, 22), color(80, 65, 115), b);
   background(bg);
 
-  // 위쪽 벽 영역 살짝 어둡게
   noStroke();
   fill(red(bg) * 0.7, green(bg) * 0.7, blue(bg) * 0.85);
   rect(0, 0, W, ROOM_TOP);
 
-  // 바닥
   fill(45 + b * 30, 35 + b * 25, 70 + b * 30);
-  rect(0, ROOM_BOTTOM - 30, W, 30);
+  rect(0, ROOM_BOTTOM - 30 * S, W, 30 * S);
 
-  // 침대 (왼쪽)
-  drawBed(18, ROOM_BOTTOM - 70);
-  // 쓰레기 더미
-  drawTrash(95, ROOM_BOTTOM - 22);
-  drawTrash(130, ROOM_BOTTOM - 18);
+  drawBed(18 * S, ROOM_BOTTOM - 70 * S);
+  drawTrash(95 * S, ROOM_BOTTOM - 22 * S);
+  drawTrash(130 * S, ROOM_BOTTOM - 18 * S);
 
-  // 문 (오른쪽 세로 선)
-  drawDoor(W - 28, ROOM_TOP + 20, ROOM_BOTTOM - 30);
+  drawDoor(W - 28 * S, ROOM_TOP + 20 * S, ROOM_BOTTOM - 30 * S);
 
-  // 캐릭터 + 박스
   const px = lerp(PLAYER_RANGE_LEFT, PLAYER_RANGE_RIGHT, playerX);
-  const py = ROOM_BOTTOM - 30;
+  const py = ROOM_BOTTOM - 30 * S;
   drawPlayer(px, py);
   drawBoxStack(px, py, boxCount);
 
-  // 어두움 오버레이 (왼쪽일수록 진함)
   const darkAlpha = (1 - b) * 140;
   if (darkAlpha > 0) {
     fill(0, darkAlpha);
@@ -140,63 +155,54 @@ function drawScene() {
 function drawBed(x, y) {
   noStroke();
   fill(70, 50, 60);
-  rect(x, y, 78, 30);                // 프레임
+  rect(x, y, 78 * S, 30 * S);
   fill(150, 80, 95);
-  rect(x + 4, y + 4, 70, 22);        // 매트리스
+  rect(x + 4 * S, y + 4 * S, 70 * S, 22 * S);
   fill(230, 215, 230);
-  rect(x + 6, y + 6, 22, 14);        // 베개
-  // 흐트러진 이불 한 자락
+  rect(x + 6 * S, y + 6 * S, 22 * S, 14 * S);
   fill(120, 60, 75);
-  rect(x + 36, y + 6, 36, 18);
+  rect(x + 36 * S, y + 6 * S, 36 * S, 18 * S);
 }
 
 function drawTrash(x, y) {
   noStroke();
   fill(60, 60, 60);
-  rect(x, y, 14, 10);
+  rect(x, y, 14 * S, 10 * S);
   fill(80, 80, 80);
-  rect(x + 4, y - 5, 10, 6);
+  rect(x + 4 * S, y - 5 * S, 10 * S, 6 * S);
 }
 
 function drawDoor(x, yTop, yBottom) {
   noStroke();
-  // 문 빛 번짐
   fill(100, 230, 180, 60);
-  rect(x - 6, yTop, 16, yBottom - yTop);
-  // 문선
+  rect(x - 6 * S, yTop, 16 * S, yBottom - yTop);
   fill(140, 240, 200);
-  rect(x, yTop, 4, yBottom - yTop);
+  rect(x, yTop, 4 * S, yBottom - yTop);
 }
 
 function drawPlayer(x, y) {
   noStroke();
-  // 지게 (등 뒤 — 캐릭터 왼쪽으로 약간 오프셋)
   fill(110, 75, 45);
-  rect(x - 10, y - 38, 4, 34);       // 세로 프레임
-  rect(x - 12, y - 8, 10, 4);        // 받침
+  rect(x - 10 * S, y - 38 * S, 4 * S, 34 * S);
+  rect(x - 12 * S, y - 8 * S, 10 * S, 4 * S);
   fill(85, 55, 30);
-  rect(x - 11, y - 6, 8, 2);
+  rect(x - 11 * S, y - 6 * S, 8 * S, 2 * S);
 
-  // 다리
   fill(40, 35, 60);
-  rect(x - 6, y - 8, 4, 8);
-  rect(x + 1, y - 8, 4, 8);
+  rect(x - 6 * S, y - 8 * S, 4 * S, 8 * S);
+  rect(x + 1 * S, y - 8 * S, 4 * S, 8 * S);
 
-  // 몸통 (후드 느낌)
   fill(80, 90, 130);
-  rect(x - 7, y - 22, 13, 16);
+  rect(x - 7 * S, y - 22 * S, 13 * S, 16 * S);
 
-  // 머리
   fill(245, 220, 200);
-  rect(x - 5, y - 32, 11, 11);
-  // 머리카락
+  rect(x - 5 * S, y - 32 * S, 11 * S, 11 * S);
   fill(40, 30, 35);
-  rect(x - 5, y - 32, 11, 5);
-  rect(x - 5, y - 28, 2, 3);
-  rect(x + 4, y - 28, 2, 3);
-  // 오른쪽을 바라보는 눈
+  rect(x - 5 * S, y - 32 * S, 11 * S, 5 * S);
+  rect(x - 5 * S, y - 28 * S, 2 * S, 3 * S);
+  rect(x + 4 * S, y - 28 * S, 2 * S, 3 * S);
   fill(20);
-  rect(x + 3, y - 26, 2, 2);
+  rect(x + 3 * S, y - 26 * S, 2 * S, 2 * S);
 }
 
 function drawBoxStack(x, baseY, count) {
@@ -204,8 +210,8 @@ function drawBoxStack(x, baseY, count) {
   const flash = millis() - boxFlashAt < 400;
   const topIdx = count - 1;
   for (let i = 0; i < count; i++) {
-    const bx = x - 16;
-    const by = baseY - 42 - i * 9;
+    const bx = x - 16 * S;
+    const by = baseY - 42 * S - i * 9 * S;
     const isTop = i === topIdx;
     let c = color(200, 140, 80);
     if (isTop && flash && Math.floor(millis() / 80) % 2 === 0) {
@@ -213,11 +219,10 @@ function drawBoxStack(x, baseY, count) {
     }
     noStroke();
     fill(c);
-    rect(bx, by, 18, 9);
-    // 박스 디테일
+    rect(bx, by, 18 * S, 9 * S);
     fill(140, 80, 35);
-    rect(bx, by + 4, 18, 1);
-    rect(bx + 8, by, 1, 9);
+    rect(bx, by + 4 * S, 18 * S, 1 * S);
+    rect(bx + 8 * S, by, 1 * S, 9 * S);
   }
 }
 
@@ -234,27 +239,39 @@ function drawCountdownOverlay() {
   else { label = '방을 탈출하세요'; big = false; }
 
   fill(255);
-  textSize(big ? 90 : 26);
+  textSize((big ? 90 : 26) * S);
   text(label, W / 2, H / 2);
 }
 
 // ---------- HUD ----------
 function drawHUD() {
-  textSize(12);
+  textSize(12 * S);
   fill(180, 240, 200, 220);
   textAlign(LEFT, TOP);
-  text('[ROOM_01]', 10, 12);
+  text('[ROOM_01]', 10 * S, 12 * S);
   textAlign(RIGHT, TOP);
-  text('지게 무게: ' + boxCount, W - 10, 12);
+  text('지게 무게: ' + boxCount, W - 10 * S, 12 * S);
   textAlign(CENTER, CENTER);
 }
 
 // ---------- buttons ----------
 function forwardBtn() {
-  return { x: 20, y: BTN_AREA_TOP + 10, w: 230, h: 140 };
+  const btnH = Math.min(140 * S, H * 0.22);
+  return {
+    x: W * 0.28,
+    y: BTN_AREA_TOP + 10 * S,
+    w: W * 0.66,
+    h: btnH,
+  };
 }
 function restBtn() {
-  return { x: 265, y: BTN_AREA_TOP + 50, w: 80, h: 70 };
+  const btnH = Math.min(70 * S, H * 0.11);
+  return {
+    x: W * 0.04,
+    y: BTN_AREA_TOP + 40 * S,
+    w: W * 0.22,
+    h: btnH,
+  };
 }
 function inRect(mx, my, r) {
   return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
@@ -267,35 +284,35 @@ function drawButtons() {
   // [앞으로 가기]
   noStroke();
   fill(40, 10, 15);
-  rect(fwd.x + 3, fwd.y + 5, fwd.w, fwd.h, 10);
+  rect(fwd.x + 3 * S, fwd.y + 5 * S, fwd.w, fwd.h, 10 * S);
   fill(220, 60, 70);
-  rect(fwd.x, fwd.y, fwd.w, fwd.h, 10);
+  rect(fwd.x, fwd.y, fwd.w, fwd.h, 10 * S);
   fill(255, 120, 130);
-  rect(fwd.x + 6, fwd.y + 6, fwd.w - 12, 6, 6);
+  rect(fwd.x + 6 * S, fwd.y + 6 * S, fwd.w - 12 * S, 6 * S, 6 * S);
   fill(255);
-  textSize(22);
+  textSize(22 * S);
   text('▶ 앞으로 가기', fwd.x + fwd.w / 2, fwd.y + fwd.h / 2);
 
   // [잠시 쉬기] — 피자박스가 쌓인 모양
   fill(30, 25, 30);
-  rect(rest.x + 3, rest.y + 5, rest.w, rest.h, 8);
+  rect(rest.x + 3 * S, rest.y + 5 * S, rest.w, rest.h, 8 * S);
   fill(heldRest ? 180 : 130, heldRest ? 150 : 125, heldRest ? 130 : 130);
-  rect(rest.x, rest.y, rest.w, rest.h, 8);
-  // 작은 피자박스 아이콘 더미
+  rect(rest.x, rest.y, rest.w, rest.h, 8 * S);
+
   push();
-  translate(rest.x + 14, rest.y + 14);
+  translate(rest.x + 14 * S, rest.y + 14 * S);
   fill(200, 140, 80);
-  rect(2, 14, 50, 10);
-  rect(6, 6, 46, 10);
-  rect(10, -2, 42, 10);
+  rect(2 * S, 14 * S, 50 * S, 10 * S);
+  rect(6 * S, 6 * S, 46 * S, 10 * S);
+  rect(10 * S, -2 * S, 42 * S, 10 * S);
   fill(140, 80, 35);
-  rect(2, 18, 50, 1);
-  rect(6, 10, 46, 1);
-  rect(10, 2, 42, 1);
+  rect(2 * S, 18 * S, 50 * S, 1 * S);
+  rect(6 * S, 10 * S, 46 * S, 1 * S);
+  rect(10 * S, 2 * S, 42 * S, 1 * S);
   pop();
   fill(255);
-  textSize(12);
-  text('잠시 쉬기', rest.x + rest.w / 2, rest.y + rest.h - 12);
+  textSize(12 * S);
+  text('잠시 쉬기', rest.x + rest.w / 2, rest.y + rest.h - 12 * S);
 }
 
 // ---------- end card ----------
@@ -319,18 +336,18 @@ function drawEndCard() {
   }
 
   fill(255);
-  textSize(22);
-  text(title, W / 2, H / 2 - 50);
-  textSize(13);
+  textSize(22 * S);
+  text(title, W / 2, H / 2 - 50 * S);
+  textSize(13 * S);
   fill(230, 230, 230);
-  text(body, W / 2, H / 2 - 10);
+  text(body, W / 2, H / 2 - 10 * S);
   fill(160, 200, 220);
-  text(hint, W / 2, H / 2 + 14);
+  text(hint, W / 2, H / 2 + 14 * S);
 
   if (millis() - endShownAt > 800) {
     fill(255, 200 + sin(millis() / 300) * 40);
-    textSize(12);
-    text('탭하면 다시 시작', W / 2, H / 2 + 60);
+    textSize(12 * S);
+    text('탭하면 다시 시작', W / 2, H / 2 + 60 * S);
   }
 }
 
