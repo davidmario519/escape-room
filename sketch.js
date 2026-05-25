@@ -11,7 +11,7 @@ const DESKTOP_MAX_W = 500;              // 데스크탑에서 너비 제한 (모
 const AUTO_DRIFT_PER_SEC = 0.025;
 const FORWARD_PER_TAP = 0.020;
 const BOX_PENALTY = 0.5;
-const BOX_INTERVAL_MS = 4000;
+const BOX_INTERVAL_MS = 3000;
 const MAX_BOX_COUNT = 8;
 
 // --- 상태 ---
